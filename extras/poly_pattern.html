@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plus Shape Tiling Visualizer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Aspect ratio mapping for cells */
+        .cell {
+            aspect-ratio: 1 / 1;
+            position: relative;
+            transition: background-color 0.1s ease;
+            user-select: none;
+            box-sizing: border-box;
+            border: 1px solid rgba(241, 245, 249, 0.5);
+        }
+        
+        /* Grid base design */
+        .cell-main {
+            background-color: #ffffff;
+        }
+
+        .cell-outside {
+            background-color: #fafafa;
+            border: 1px dotted #e5e5e5;
+            opacity: 0.8;
+        }
+
+        /* Overlap color rules */
+        .cell-red {
+            background-color: #ef4444 !important;
+        }
+
+        /* Drag-and-drop preview styling */
+        .cell-preview {
+            background-color: rgba(148, 163, 184, 0.4) !important;
+        }
+
+        /* Black anchor point at the center of the shape */
+        .cell-center::after {
+            content: '';
+            position: absolute;
+            width: 26%;
+            height: 26%;
+            background-color: #0f172a;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 2px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+            cursor: grab;
+            z-index: 10;
+        }
+
+        .cell-center:active::after {
+            cursor: grabbing;
+        }
+
+        /* Boundaries defining the main grid coordinates */
+        .border-left-thick { border-left: 2px solid #64748b !important; }
+        .border-right-thick { border-right: 2px solid #64748b !important; }
+        .border-bottom-thick { border-bottom: 2px solid #64748b !important; }
+        .border-top-thick { border-top: 2px solid #64748b !important; }
+
+        #grid-container {
+            max-height: 70vh;
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col select-none">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 py-4 px-6 shadow-sm shrink-0">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-xl font-bold text-slate-900 font-sans tracking-tight">Plus Shape Tiling Visualizer</h1>
+                <p class="text-xs text-slate-500 mt-1">
+                    Drag the black center anchors to relocate shapes, or pull new ones from the adjacent dock.
+                </p>
+            </div>
+            <div id="status-bar" class="text-sm bg-slate-100 px-3 py-1.5 rounded border border-slate-200 font-mono">
+                Coordinate: <span id="status-coord" class="font-bold">---</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col lg:flex-row gap-6">
+        
+        <!-- Left Sidebar (Inputs, Lists, Presets) -->
+        <section class="w-full lg:w-80 flex flex-col gap-5 shrink-0">
+            
+            <!-- Grid Size & Boundary Settings -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4">Grid Parameters</h2>
+                
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1" for="grid-width">Width (X)</label>
+                        <input type="number" id="grid-width" min="4" max="32" value="12" 
+                               class="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1" for="grid-height">Height (Y)</label>
+                        <input type="number" id="grid-height" min="4" max="32" value="12" 
+                               class="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- World Size Presets -->
+                <div class="mb-4 pt-1 border-t border-slate-100">
+                    <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Quick World Sizes</span>
+                    <div class="grid grid-cols-4 gap-1.5">
+                        <button type="button" class="size-preset-btn py-1 px-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-semibold border border-slate-200 transition" data-size="8">8x8</button>
+                        <button type="button" class="size-preset-btn py-1 px-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-semibold border border-slate-200 transition" data-size="12">12x12</button>
+                        <button type="button" class="size-preset-btn py-1 px-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-semibold border border-slate-200 transition" data-size="16">16x16</button>
+                        <button type="button" class="size-preset-btn py-1 px-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-semibold border border-slate-200 transition" data-size="22">22x22</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="wrap-checkbox" checked 
+                           class="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500">
+                    <label for="wrap-checkbox" class="text-sm font-medium text-slate-700">Enable Wrap-Around (Torus)</label>
+                </div>
+            </div>
+
+            <!-- Coordinates text editor -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[220px]">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wider">Centers Coordinates</h2>
+                    <span id="validation-feedback" class="text-xs font-medium text-green-600">Synced</span>
+                </div>
+                <textarea id="centers-textarea" 
+                          class="w-full flex-1 p-3 border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed"
+                          placeholder="[(x, y), (x, y)]"></textarea>
+                <button id="apply-btn" class="mt-3 w-full bg-slate-900 text-white py-2 rounded-lg text-xs font-semibold hover:bg-slate-800 transition">
+                    Apply Coordinates
+                </button>
+            </div>
+
+            <!-- Presets & Solvers -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Presets & Solvers</h2>
+                <div class="flex flex-col gap-3">
+                    
+                    <!-- Dynamic Heuristic Auto Solve -->
+                    <button id="auto-solve-btn" class="w-full bg-violet-600 text-white py-2 px-3 rounded-lg text-xs font-bold hover:bg-violet-700 transition text-left flex items-center justify-between shadow-sm">
+                        <span>🤖 Auto Solve Current Grid</span>
+                        <span class="bg-violet-500 text-[9px] px-1.5 py-0.5 rounded">Heuristic</span>
+                    </button>
+
+                    <!-- Pre-calculated solutions -->
+                    <div class="border-t border-slate-100 pt-2.5">
+                        <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Preset Solutions (0% Overlap)</span>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button type="button" class="preset-sol-btn py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded text-[11px] font-semibold border border-slate-200 transition text-left" data-size="8">8x8 (2 Shapes)</button>
+                            <button type="button" class="preset-sol-btn py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded text-[11px] font-semibold border border-slate-200 transition text-left" data-size="12">12x12 (4 Shapes)</button>
+                            <button type="button" class="preset-sol-btn py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded text-[11px] font-semibold border border-slate-200 transition text-left" data-size="16">16x16 (8 Shapes)</button>
+                            <button type="button" class="preset-sol-btn py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded text-[11px] font-semibold border border-slate-200 transition text-left" data-size="22">22x22 (15 Shapes)</button>
+                            <button type="button" class="preset-sol-btn py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[11px] font-bold border border-blue-200 transition text-left col-span-2" data-size="25">25x25 (25 Shapes - Perfect)</button>
+                            <button type="button" class="preset-sol-btn py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-bold border border-indigo-200 transition text-left col-span-2" data-size="32">32x32 (32 Shapes - Symmetric)</button>
+                        </div>
+                    </div>
+
+                    <button id="clear-grid-btn" class="w-full bg-rose-50 text-rose-700 py-2 px-3 rounded-lg text-xs font-semibold border border-rose-100 hover:bg-rose-100 transition text-left mt-1">
+                        🗑️ Clear All Patterns
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Side (Visualizer Board with Dock Embedded next to Display) -->
+        <section class="flex-1 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center">
+            
+            <div class="w-full flex flex-col md:flex-row gap-6 items-stretch justify-center">
+                
+                <!-- Embedded Dock Column (Positioned directly to the left of the grid on desktop) -->
+                <div class="w-full md:w-56 flex flex-col gap-4 shrink-0 justify-start">
+                    
+                    <!-- Shape Dock -->
+                    <div id="source-card" class="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition duration-150 cursor-grab active:cursor-grabbing select-none">
+                        <span id="source-title" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Drag Shape</span>
+                        
+                        <div id="mini-preview-grid" class="grid grid-cols-7 gap-0.5 w-16 h-16 p-0.5 bg-white rounded border border-slate-200 pointer-events-none">
+                            <!-- Injected mini preview -->
+                        </div>
+                        
+                        <span id="source-desc" class="text-[9px] text-slate-400 text-center">Drag onto grid</span>
+                    </div>
+
+                    <!-- Visual Indicator Area (Guide) -->
+                    <div class="flex flex-col gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 text-[10px] text-slate-500 font-medium">
+                        <span class="font-bold text-slate-700 text-center uppercase border-b pb-1 mb-1 border-slate-200">Guide</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded bg-red-500 inline-block"></span> Overlaps / Outside
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded bg-blue-500 inline-block"></span> Distinct shape colors
+                        </div>
+                    </div>
+
+                    <!-- Tiling Metrics Panel -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2">
+                        <span class="font-bold text-slate-700 text-[10px] text-center uppercase border-b pb-1 mb-1 border-slate-200">Tiling Metrics</span>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="bg-white p-2 rounded border border-slate-100 text-center">
+                                <span class="block text-[8px] text-slate-400 font-medium uppercase tracking-wider">Shapes</span>
+                                <span id="stat-shapes" class="text-sm font-bold text-slate-800">1</span>
+                            </div>
+                            <div class="bg-white p-2 rounded border border-slate-100 text-center">
+                                <span class="block text-[8px] text-slate-400 font-medium uppercase tracking-wider">Solved</span>
+                                <span id="stat-fill" class="text-sm font-bold text-slate-800">17.4%</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Progress bar -->
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden mt-1">
+                            <div id="stat-progress-bar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style="width: 17.4%"></div>
+                        </div>
+                        
+                        <!-- Detailed breakdown in monospace -->
+                        <div class="flex flex-col gap-0.5 text-[9px] text-slate-400 font-mono mt-1">
+                            <span id="stat-uncovered">Uncovered: 0 cells</span>
+                            <span id="stat-overlapped" class="transition-colors duration-150">Overlapped: 0 cells</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Display Grid -->
+                <div class="flex-1 flex flex-col items-center justify-center">
+                    <div id="grid-container" class="grid w-full aspect-square shadow-sm rounded-lg overflow-hidden border border-slate-200">
+                        <!-- Dynamic injection of cells -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Legends -->
+            <div class="mt-6 flex flex-wrap gap-4 text-xs font-medium text-slate-600 justify-center">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 bg-white border border-slate-300 rounded"></span>
+                    <span>Main Grid</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 bg-slate-100 border border-slate-300 border-dotted rounded"></span>
+                    <span>Buffer Zone</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 bg-slate-400 rounded relative"><span class="absolute w-1.5 h-1.5 bg-slate-900 rounded-sm top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></span></span>
+                    <span>Center Anchor</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 bg-blue-500 rounded border-2 border-black"></span>
+                    <span>Outer Black Boundary</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 bg-red-500 rounded"></span>
+                    <span>Overlap / Overflow</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Parameters
+        let gridWidth = 12;
+        let gridHeight = 12;
+        let centers = [{ id: 1, x: 6, y: 6, colorIndex: 0 }];
+        let nextId = 2;
+        const SHAPE_RADIUS = 3;
+
+        // Color palette for dynamic map assignments
+        const PALETTE = [
+            '#3b82f6', // blue
+            '#10b981', // emerald
+            '#8b5cf6', // violet
+            '#f59e0b', // amber
+            '#ec4899', // pink
+            '#06b6d4', // cyan
+            '#f97316', // orange
+            '#14b8a6', // teal
+            '#6366f1', // indigo
+            '#84cc16'  // lime
+        ];
+
+        // Interaction States
+        let isDraggingNew = false;
+        let draggedCenterId = null;
+        let hoveredGridCoord = null;
+        let isHoveringTrash = false;
+        let cellsMap = {};
+
+        function getShapeOffsets() {
+            const offsets = [];
+            for (let dx = -SHAPE_RADIUS; dx <= SHAPE_RADIUS; dx++) {
+                for (let dy = -SHAPE_RADIUS; dy <= SHAPE_RADIUS; dy++) {
+                    if (Math.abs(dx) + Math.abs(dy) <= SHAPE_RADIUS) {
+                        offsets.push({ dx, dy });
+                    }
+                }
+            }
+            return offsets;
+        }
+
+        function createCenter(x, y) {
+            const id = nextId++;
+            return { id, x, y, colorIndex: 0 };
+        }
+
+        // Real-time greedy graph coloring solver to eliminate color collisions
+        function resolveColorCollisions() {
+            const wrapEnabled = document.getElementById('wrap-checkbox').checked;
+            
+            const adj = {};
+            centers.forEach(c => adj[c.id] = []);
+
+            for (let i = 0; i < centers.length; i++) {
+                for (let j = i + 1; j < centers.length; j++) {
+                    const c1 = centers[i];
+                    const c2 = centers[j];
+
+                    let dx = Math.abs(c1.x - c2.x);
+                    let dy = Math.abs(c1.y - c2.y);
+                    if (wrapEnabled) {
+                        dx = Math.min(dx, gridWidth - dx);
+                        dy = Math.min(dy, gridHeight - dy);
+                    }
+                    const dist = dx + dy;
+
+                    if (dist <= 7) {
+                        adj[c1.id].push(c2.id);
+                        adj[c2.id].push(c1.id);
+                    }
+                }
+            }
+
+            // Greedy coloring assignment
+            const colors = {};
+            centers.forEach(c => {
+                const neighborColors = new Set();
+                adj[c.id].forEach(nbrId => {
+                    if (colors[nbrId] !== undefined) {
+                        neighborColors.add(colors[nbrId]);
+                    }
+                });
+
+                let colorIndex = 0;
+                while (neighborColors.has(colorIndex)) {
+                    colorIndex++;
+                }
+                colors[c.id] = colorIndex;
+                c.colorIndex = colorIndex % PALETTE.length;
+            });
+        }
+
+        // GRASP Metaheuristic Auto-Solver (Min-Constraint, Adaptive Search)
+        function runAutoSolver() {
+            const wrapEnabled = document.getElementById('wrap-checkbox').checked;
+            const offsets = getShapeOffsets();
+            
+            let bestCenters = [];
+            let bestCoverage = -1;
+            const totalCells = gridWidth * gridHeight;
+
+            // We run 25 trials of our high-intelligence GRASP metaheuristic.
+            for (let trial = 0; trial < 25; trial++) {
+                const currentCenters = [];
+                const covered = new Set();
+
+                while (true) {
+                    // 1. Find all valid candidates (0 overlaps with already covered cells)
+                    const candidates = [];
+                    for (let x = 0; x < gridWidth; x++) {
+                        for (let y = 0; y < gridHeight; y++) {
+                            let valid = true;
+
+                            for (const offset of offsets) {
+                                let tx = x + offset.dx;
+                                let ty = y + offset.dy;
+
+                                if (wrapEnabled) {
+                                    tx = ((tx % gridWidth) + gridWidth) % gridWidth;
+                                    ty = ((ty % gridHeight) + gridHeight) % gridHeight;
+                                } else {
+                                    if (tx < 0 || tx >= gridWidth || ty < 0 || ty >= gridHeight) {
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+
+                                if (covered.has(`${tx},${ty}`)) {
+                                    valid = false;
+                                    break;
+                                }
+                            }
+
+                            if (valid) {
+                                candidates.push({ x, y });
+                            }
+                        }
+                    }
+
+                    if (candidates.length === 0) break;
+
+                    // 2. Score candidates based on their "Impact"
+                    const scoredCandidates = candidates.map(c => {
+                        let impact = 0;
+                        for (const other of candidates) {
+                            if (other === c) continue;
+                            let dx = Math.abs(c.x - other.x);
+                            let dy = Math.abs(c.y - other.y);
+                            if (wrapEnabled) {
+                                dx = Math.min(dx, gridWidth - dx);
+                                dy = Math.min(dy, gridHeight - dy);
+                            }
+                            if (dx + dy <= 6) {
+                                impact++;
+                            }
+                        }
+                        return { x: c.x, y: c.y, score: impact };
+                    });
+
+                    scoredCandidates.sort((a, b) => a.score - b.score);
+
+                    const minScore = scoredCandidates[0].score;
+                    const rcl = scoredCandidates.filter(c => c.score <= minScore + 2).slice(0, 5);
+
+                    const chosen = rcl[Math.floor(Math.random() * rcl.length)];
+                    currentCenters.push(chosen);
+
+                    offsets.forEach(offset => {
+                        let tx = chosen.x + offset.dx;
+                        let ty = chosen.y + offset.dy;
+                        if (wrapEnabled) {
+                            tx = ((tx % gridWidth) + gridWidth) % gridWidth;
+                            ty = ((ty % gridHeight) + gridHeight) % gridHeight;
+                        }
+                        covered.add(`${tx},${ty}`);
+                    });
+                }
+
+                if (covered.size > bestCoverage) {
+                    bestCoverage = covered.size;
+                    bestCenters = currentCenters;
+                }
+
+                if (bestCoverage === totalCells) break;
+            }
+
+            centers = bestCenters.map((c, idx) => ({
+                id: idx + 1,
+                x: c.x,
+                y: c.y,
+                colorIndex: 0
+            }));
+            nextId = centers.length + 1;
+
+            updateAndRender();
+        }
+
+        // Generate coordinates for perfect 25x25 tiling preset
+        function generateLatticeTiling() {
+            const result = [];
+            const seen = new Set();
+            const queue = [{ x: 0, y: 0 }];
+            seen.add("0,0");
+
+            while (queue.length > 0 && result.length < 25) {
+                const curr = queue.shift();
+                result.push(curr);
+
+                const neighbors = [
+                    { x: (curr.x + 4) % 25, y: (curr.y + 3) % 25 },
+                    { x: (curr.x - 3 + 25) % 25, y: (curr.y + 4) % 25 },
+                    { x: (curr.x - 4 + 25) % 25, y: (curr.y - 3 + 25) % 25 },
+                    { x: (curr.x + 3) % 25, y: (curr.y - 4 + 25) % 25 }
+                ];
+
+                for (const n of neighbors) {
+                    const key = `${n.x},${n.y}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        queue.push(n);
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Generate dynamic symmetrically interleaved 32x32 preset
+        function generate32x32Preset() {
+            const list = [];
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    list.push({ x: c * 8 + 4, y: r * 8 + 4 });
+                    list.push({ x: c * 8, y: r * 8 });
+                }
+            }
+            return list;
+        }
+
+        // Programmatic Preset Solution Generator that mathematically enforces 0% overlaps (dx + dy >= 7)
+        function generateStrictPreset(size) {
+            let bestCenters = [];
+            
+            // Run multiple randomized trials using the min-impact heuristic
+            for (let trial = 0; trial < 150; trial++) {
+                const currentCenters = [];
+                while (true) {
+                    const candidates = [];
+                    for (let x = 0; x < size; x++) {
+                        for (let y = 0; y < size; y++) {
+                            let valid = true;
+                            // Enforce strict wrapped Manhattan distance >= 7
+                            for (const c of currentCenters) {
+                                let dx = Math.abs(x - c.x);
+                                let dy = Math.abs(y - c.y);
+                                dx = Math.min(dx, size - dx);
+                                dy = Math.min(dy, size - dy);
+                                if (dx + dy <= 6) {
+                                    valid = false;
+                                    break;
+                                }
+                            }
+                            if (valid) candidates.push({ x, y });
+                        }
+                    }
+
+                    if (candidates.length === 0) break;
+
+                    const scoredCandidates = candidates.map(c => {
+                        let impact = 0;
+                        for (const other of candidates) {
+                            if (other === c) continue;
+                            let dx = Math.abs(c.x - other.x);
+                            let dy = Math.abs(c.y - other.y);
+                            dx = Math.min(dx, size - dx);
+                            dy = Math.min(dy, size - dy);
+                            if (dx + dy <= 6) impact++;
+                        }
+                        return { x: c.x, y: c.y, score: impact };
+                    });
+
+                    scoredCandidates.sort((a, b) => a.score - b.score);
+                    const minScore = scoredCandidates[0].score;
+                    const rcl = scoredCandidates.filter(c => c.score <= minScore + 2).slice(0, 5);
+                    const chosen = rcl[Math.floor(Math.random() * rcl.length)];
+                    currentCenters.push(chosen);
+                }
+
+                if (currentCenters.length > bestCenters.length) {
+                    bestCenters = currentCenters;
+                }
+
+                // Match known maximum non-overlapping counts to break early
+                const maxExpected = { 8: 2, 12: 4, 16: 8, 22: 15, 25: 25, 32: 32 };
+                if (bestCenters.length >= maxExpected[size]) break;
+            }
+            return bestCenters;
+        }
+
+        function loadPresetSolution(size) {
+            gridWidth = size;
+            gridHeight = size;
+            document.getElementById('grid-width').value = size;
+            document.getElementById('grid-height').value = size;
+            document.getElementById('wrap-checkbox').checked = true; // All optimal layouts utilize wrapping
+
+            let list = [];
+            if (size === 25) {
+                list = generateLatticeTiling();
+            } else if (size === 32) {
+                list = generate32x32Preset();
+            } else {
+                list = generateStrictPreset(size);
+            }
+
+            centers = list.map((c, idx) => ({
+                id: idx + 1,
+                x: c.x,
+                y: c.y,
+                colorIndex: 0
+            }));
+            nextId = centers.length + 1;
+
+            rebuildGrid();
+            updateAndRender();
+        }
+
+        function parseCentersText(text) {
+            const regex = /\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g;
+            const parsed = [];
+            let match;
+            let tempId = 1;
+            while ((match = regex.exec(text)) !== null) {
+                parsed.push({
+                    id: tempId,
+                    x: parseInt(match[1], 10),
+                    y: parseInt(match[2], 10),
+                    colorIndex: 0
+                });
+                tempId++;
+            }
+            nextId = tempId;
+            return parsed;
+        }
+
+        function formatCenters(coords) {
+            return '[' + coords.map(c => `(${c.x}, ${c.y})`).join(', ') + ']';
+        }
+
+        // Mini preview inside shape dock
+        function buildMiniPreview() {
+            const miniGrid = document.getElementById('mini-preview-grid');
+            miniGrid.innerHTML = '';
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'w-full h-full rounded-sm';
+                    const dx = c - 3;
+                    const dy = 3 - r; 
+                    if (Math.abs(dx) + Math.abs(dy) <= 3) {
+                        if (dx === 0 && dy === 0) {
+                            cell.style.backgroundColor = '#0f172a';
+                        } else {
+                            cell.style.backgroundColor = '#3b82f6';
+                        }
+                    } else {
+                        cell.style.backgroundColor = 'transparent';
+                    }
+                    miniGrid.appendChild(cell);
+                }
+            }
+        }
+
+        // Rebuild elements on dimension adjustments
+        function rebuildGrid() {
+            const container = document.getElementById('grid-container');
+            container.innerHTML = '';
+            cellsMap = {};
+
+            const totalCols = gridWidth + 6;
+            const totalRows = gridHeight + 6;
+
+            container.style.gridTemplateColumns = `repeat(${totalCols}, 1fr)`;
+
+            for (let r = 0; r < totalRows; r++) {
+                for (let c = 0; c < totalCols; c++) {
+                    const x = c - 3;
+                    const y = gridHeight + 2 - r;
+
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+
+                    const isMain = (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight);
+                    if (isMain) {
+                        cell.classList.add('cell-main');
+                    } else {
+                        cell.classList.add('cell-outside');
+                    }
+
+                    // Main grid borders
+                    if (x === 0) cell.classList.add('border-left-thick');
+                    if (x === gridWidth - 1) cell.classList.add('border-right-thick');
+                    if (y === 0) cell.classList.add('border-bottom-thick');
+                    if (y === gridHeight - 1) cell.classList.add('border-top-thick');
+
+                    cell.addEventListener('mouseenter', () => onCellMouseEnter(x, y));
+                    cell.addEventListener('mouseleave', () => onCellMouseLeave());
+                    cell.addEventListener('mousedown', (e) => onCellMouseDown(e, x, y));
+
+                    container.appendChild(cell);
+                    cellsMap[`${x},${y}`] = cell;
+                }
+            }
+        }
+
+        function renderGrid() {
+            const wrapEnabled = document.getElementById('wrap-checkbox').checked;
+            const offsets = getShapeOffsets();
+
+            // Run collision solver
+            resolveColorCollisions();
+
+            // Structure occupancy space
+            const occupancy = {};
+            for (let x = -3; x < gridWidth + 3; x++) {
+                occupancy[x] = {};
+                for (let y = -3; y < gridHeight + 3; y++) {
+                    occupancy[x][y] = { count: 0, isCenter: false, centerId: null, coveredBy: [] };
+                }
+            }
+
+            const processCenter = (center, isPreview = false) => {
+                offsets.forEach(offset => {
+                    let tx = center.x + offset.dx;
+                    let ty = center.y + offset.dy;
+
+                    if (wrapEnabled) {
+                        tx = ((tx % gridWidth) + gridWidth) % gridWidth;
+                        ty = ((ty % gridHeight) + gridHeight) % gridHeight;
+                    }
+
+                    if (tx >= -3 && tx < gridWidth + 3 && ty >= -3 && ty < gridHeight + 3) {
+                        if (!occupancy[tx]) occupancy[tx] = {};
+                        if (!occupancy[tx][ty]) occupancy[tx][ty] = { count: 0, isCenter: false, centerId: null, coveredBy: [] };
+
+                        occupancy[tx][ty].count++;
+                        occupancy[tx][ty].coveredBy.push({ center, isPreview });
+                        if (offset.dx === 0 && offset.dy === 0) {
+                            occupancy[tx][ty].isCenter = true;
+                            if (!isPreview) occupancy[tx][ty].centerId = center.id;
+                        }
+                    }
+                });
+            };
+
+            centers.forEach(center => processCenter(center, false));
+
+            if (isDraggingNew && hoveredGridCoord) {
+                processCenter({ x: hoveredGridCoord.x, y: hoveredGridCoord.y, colorIndex: 8 }, true);
+            }
+
+            // Neighbor occupancy lookup tool - checks if neighbor is occupied by target shape ID
+            const getShapeAt = (nx, ny, shapeId) => {
+                let tx = nx;
+                let ty = ny;
+                if (wrapEnabled) {
+                    tx = ((tx % gridWidth) + gridWidth) % gridWidth;
+                    ty = ((ty % gridHeight) + gridHeight) % gridHeight;
+                }
+                const cellInfo = occupancy[tx]?.[ty];
+                if (!cellInfo || cellInfo.count !== 1) return null;
+                return cellInfo.coveredBy[0].center.id;
+            };
+
+            // Metrics Counters
+            let uncoveredCount = 0;
+            let solvedCount = 0;
+            let overlappedCount = 0;
+            const totalMainCells = gridWidth * gridHeight;
+
+            // Paint canvas and track metrics
+            for (let x = -3; x < gridWidth + 3; x++) {
+                for (let y = -3; y < gridHeight + 3; y++) {
+                    const cell = cellsMap[`${x},${y}`];
+                    if (!cell) continue;
+
+                    cell.className = cell.className.replace(/\bcell-(red|preview|center)\b/g, '');
+                    cell.style.backgroundColor = '';
+                    
+                    // Reset dynamic borders
+                    cell.style.borderTop = '';
+                    cell.style.borderBottom = '';
+                    cell.style.borderLeft = '';
+                    cell.style.borderRight = '';
+                    delete cell.dataset.centerId;
+
+                    const isMain = (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight);
+                    const info = occupancy[x]?.[y] || { count: 0, isCenter: false, centerId: null, coveredBy: [] };
+
+                    // Calculate main grid statistics
+                    if (isMain) {
+                        if (info.count === 0) {
+                            uncoveredCount++;
+                        } else if (info.count === 1) {
+                            solvedCount++;
+                        } else if (info.count > 1) {
+                            overlappedCount++;
+                        }
+                    }
+
+                    if (info.count > 0) {
+                        const hasPreview = info.coveredBy.some(cov => cov.isPreview);
+                        const nonPreviewCoverage = info.coveredBy.filter(cov => !cov.isPreview);
+
+                        if (hasPreview && nonPreviewCoverage.length === 0) {
+                            cell.classList.add('cell-preview');
+                        } else if (info.count > 1) {
+                            cell.classList.add('cell-red');
+                        } else {
+                            const item = info.coveredBy[0];
+                            if (isMain) {
+                                cell.style.backgroundColor = PALETTE[item.center.colorIndex];
+
+                                // Reverted border rule - draw dark borders between different adjacent shape instances
+                                const sId = item.center.id;
+                                if (getShapeAt(x - 1, y, sId) !== sId) cell.style.borderLeft = '2.5px solid #000000';
+                                if (getShapeAt(x + 1, y, sId) !== sId) cell.style.borderRight = '2.5px solid #000000';
+                                if (getShapeAt(x, y + 1, sId) !== sId) cell.style.borderTop = '2.5px solid #000000';
+                                if (getShapeAt(x, y - 1, sId) !== sId) cell.style.borderBottom = '2.5px solid #000000';
+                            } else {
+                                cell.classList.add('cell-red');
+                            }
+                        }
+
+                        if (info.isCenter) {
+                            cell.classList.add('cell-center');
+                            if (info.centerId !== null) {
+                                cell.dataset.centerId = info.centerId;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update display Panel metrics
+            const fillPercentage = ((solvedCount / totalMainCells) * 100).toFixed(1);
+            document.getElementById('stat-shapes').textContent = centers.length;
+            document.getElementById('stat-fill').textContent = `${fillPercentage}%`;
+            
+            const progressBar = document.getElementById('stat-progress-bar');
+            progressBar.style.width = `${fillPercentage}%`;
+
+            // Adjust progress bar colors based on validity states
+            progressBar.className = "h-1.5 rounded-full transition-all duration-300 ";
+            const overlappedText = document.getElementById('stat-overlapped');
+            if (overlappedCount > 0) {
+                progressBar.classList.add("bg-rose-500");
+                overlappedText.className = "text-rose-500 font-bold font-mono";
+            } else if (parseInt(fillPercentage) === 100) {
+                progressBar.classList.add("bg-emerald-500");
+                overlappedText.className = "text-emerald-500 font-bold font-mono";
+            } else {
+                progressBar.classList.add("bg-blue-600");
+                overlappedText.className = "text-slate-400 font-mono";
+            }
+
+            document.getElementById('stat-uncovered').textContent = `Uncovered: ${uncoveredCount} cells`;
+            document.getElementById('stat-overlapped').textContent = `Overlapped: ${overlappedCount} cells`;
+        }
+
+        function updateAndRender() {
+            // Sort centers by y followed by x (ascending)
+            centers.sort((a, b) => {
+                if (a.y !== b.y) {
+                    return a.y - b.y;
+                }
+                return a.x - b.x;
+            });
+
+            const textarea = document.getElementById('centers-textarea');
+            textarea.value = formatCenters(centers);
+            renderGrid();
+        }
+
+        // Pointer event loops
+        function onCellMouseDown(e, x, y) {
+            const targetCell = cellsMap[`${x},${y}`];
+            if (!targetCell) return;
+
+            const centerId = targetCell.dataset.centerId;
+            if (centerId) {
+                draggedCenterId = parseInt(centerId, 10);
+                document.body.style.cursor = 'grabbing';
+                toggleTrashMode(true);
+            }
+        }
+
+        // Mouse behaviors
+        function onCellMouseEnter(x, y) {
+            hoveredGridCoord = { x, y };
+            const isMain = (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight);
+
+            const status = document.getElementById('status-coord');
+            status.textContent = `(${x}, ${y}) ${isMain ? '' : '[Outside Zone]'}`;
+
+            if (isDraggingNew) {
+                renderGrid();
+            } else if (draggedCenterId !== null) {
+                if (isMain) {
+                    const center = centers.find(c => c.id === draggedCenterId);
+                    if (center) {
+                        center.x = x;
+                        center.y = y;
+                        updateAndRender();
+                    }
+                }
+            }
+        }
+
+        function onCellMouseLeave() {
+            hoveredGridCoord = null;
+            document.getElementById('status-coord').textContent = '---';
+            if (isDraggingNew) {
+                renderGrid();
+            }
+        }
+
+        function toggleTrashMode(active) {
+            const card = document.getElementById('source-card');
+            const title = document.getElementById('source-title');
+            const desc = document.getElementById('source-desc');
+            const preview = document.getElementById('mini-preview-grid');
+
+            if (active) {
+                card.classList.remove('border-slate-300', 'bg-slate-50');
+                card.classList.add('border-rose-400', 'bg-rose-50', 'text-rose-700');
+                title.textContent = '🗑️ Drop to Delete';
+                title.classList.remove('text-slate-500');
+                title.classList.add('text-rose-600');
+                if (desc) desc.textContent = 'Drop here to remove.';
+                preview.classList.add('opacity-10');
+            } else {
+                card.classList.remove('border-rose-400', 'bg-rose-50', 'text-rose-700');
+                card.classList.add('border-slate-300', 'bg-slate-50');
+                title.textContent = 'Drag Shape';
+                title.classList.remove('text-rose-600');
+                title.classList.add('text-slate-500');
+                if (desc) desc.textContent = 'Drag onto grid';
+                preview.classList.remove('opacity-10');
+            }
+        }
+
+        // Global Drag handlers
+        document.getElementById('source-card').addEventListener('mousedown', (e) => {
+            isDraggingNew = true;
+            document.body.style.cursor = 'grabbing';
+        });
+
+        document.getElementById('source-card').addEventListener('mouseenter', () => {
+            if (draggedCenterId !== null) {
+                isHoveringTrash = true;
+                const card = document.getElementById('source-card');
+                card.classList.add('bg-rose-100', 'border-rose-500');
+            }
+        });
+
+        document.getElementById('source-card').addEventListener('mouseleave', () => {
+            isHoveringTrash = false;
+            const card = document.getElementById('source-card');
+            card.classList.remove('bg-rose-100', 'border-rose-500');
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDraggingNew) {
+                isDraggingNew = false;
+                if (hoveredGridCoord) {
+                    const isMain = (hoveredGridCoord.x >= 0 && hoveredGridCoord.x < gridWidth && hoveredGridCoord.y >= 0 && hoveredGridCoord.y < gridHeight);
+                    if (isMain) {
+                        centers.push(createCenter(hoveredGridCoord.x, hoveredGridCoord.y));
+                    }
+                }
+                document.body.style.cursor = '';
+                updateAndRender();
+            }
+
+            if (draggedCenterId !== null) {
+                if (isHoveringTrash) {
+                    centers = centers.filter(c => c.id !== draggedCenterId);
+                }
+                draggedCenterId = null;
+                isHoveringTrash = false;
+                toggleTrashMode(false);
+                document.body.style.cursor = '';
+                updateAndRender();
+            }
+        });
+
+        // Config Changes Sync
+        function handleGridSizeChange() {
+            let w = parseInt(document.getElementById('grid-width').value, 10);
+            let h = parseInt(document.getElementById('grid-height').value, 10);
+
+            if (isNaN(w) || w < 4) w = 4;
+            if (w > 32) w = 32;
+            if (isNaN(h) || h < 4) h = 4;
+            if (h > 32) h = 32;
+
+            gridWidth = w;
+            gridHeight = h;
+
+            document.getElementById('grid-width').value = w;
+            document.getElementById('grid-height').value = h;
+
+            centers = centers.map(c => ({
+                id: c.id,
+                x: ((c.x % gridWidth) + gridWidth) % gridWidth,
+                y: ((c.y % gridHeight) + gridHeight) % gridHeight,
+                colorIndex: c.colorIndex
+            }));
+
+            rebuildGrid();
+            updateAndRender();
+        }
+
+        function handleTextareaInput() {
+            const text = document.getElementById('centers-textarea').value;
+            const feedback = document.getElementById('validation-feedback');
+            try {
+                centers = parseCentersText(text);
+                renderGrid();
+                feedback.textContent = "Synced";
+                feedback.className = "text-xs font-medium text-green-600";
+            } catch (err) {
+                feedback.textContent = "Format Error";
+                feedback.className = "text-xs font-medium text-rose-500";
+            }
+        }
+
+        document.getElementById('grid-width').addEventListener('change', handleGridSizeChange);
+        document.getElementById('grid-height').addEventListener('change', handleGridSizeChange);
+        document.getElementById('wrap-checkbox').addEventListener('change', renderGrid);
+        document.getElementById('centers-textarea').addEventListener('input', handleTextareaInput);
+
+        document.getElementById('apply-btn').addEventListener('click', () => {
+            handleTextareaInput();
+            updateAndRender();
+        });
+
+        // Size Presets Binding
+        document.querySelectorAll('.size-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const size = parseInt(btn.dataset.size, 10);
+                document.getElementById('grid-width').value = size;
+                document.getElementById('grid-height').value = size;
+                handleGridSizeChange();
+            });
+        });
+
+        // Preset Solutions Binding
+        document.querySelectorAll('.preset-sol-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const size = parseInt(btn.dataset.size, 10);
+                loadPresetSolution(size);
+            });
+        });
+
+        // Solver & Presets Action Router
+        document.getElementById('auto-solve-btn').addEventListener('click', runAutoSolver);
+        document.getElementById('clear-grid-btn').addEventListener('click', () => {
+            centers = [];
+            updateAndRender();
+        });
+
+        // Initialize Workspace on load
+        window.addEventListener('DOMContentLoaded', () => {
+            buildMiniPreview();
+            rebuildGrid();
+            updateAndRender();
+        });
+    </script>
+</body>
+</html>
