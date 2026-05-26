@@ -1,0 +1,24 @@
+{
+  // Enable formatting on save for all languages (or specifically for Python)
+  "editor.formatOnSave": true,
+
+  // Set Ruff as the default formatter for Python files
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
+
+  // Optional: Enable auto-fixable linting problems on save (like organizing imports)
+  "editor.codeActionsOnSave": {
+    "source.organizeImports.ruff": "explicit",
+    "source.fixAll": "explicit"
+  },
+
+  // Ignore __builtins__.py
+  "files.associations": {
+    "__builtins__.py": "game_builtins"
+  },
+  "[game_builtins]": {
+    "editor.formatOnSave": false
+  }
+}
