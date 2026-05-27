@@ -5,7 +5,6 @@ from __builtins__ import (
     Entity,
     Grounds,
     Items,
-    North,
     can_harvest,
     clear,
     get_companion,
@@ -122,7 +121,6 @@ def farm_poly(target_plant: Entity = Entities.Carrot):
     for y in range(world_size):
         if not spawn_drone(drone_plant_row, y, map[y], world_size):
             drone_plant_row(y, map[y], world_size)
-        move(North)
 
     while num_drones() != 1:
         pass  # Just waiting the setup to be complete
