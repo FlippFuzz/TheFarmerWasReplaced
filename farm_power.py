@@ -3,9 +3,11 @@ from __builtins__ import (
     East,
     Entities,
     Grounds,
+    Items,
     can_harvest,
     clear,
     get_ground_type,
+    get_water,
     get_world_size,
     harvest,
     max_drones,
@@ -15,6 +17,7 @@ from __builtins__ import (
     plant,
     spawn_drone,
     till,
+    use_item,
     wait_for,
 )
 from utils import move_to
@@ -38,8 +41,15 @@ def drone_plant_measure_sunflowers(row_y: int, world_size: int) -> Any:
         if get_ground_type() != Grounds.Soil:
             till()
         plant(Entities.Sunflower)
-        petals = measure()
+        petals: int = measure()  # type: ignore - petals is int
         measurements[petals].append((x, row_y))  # type: ignore - We know petals is int
+
+        # Water sunflowers with high petal counts because we want them to be grown ASAP
+        # TODO: Figure out exactly which petal counts to water. 13 is just a random number.
+        if petals > 13:
+            if get_water() < 0.75:
+                use_item(Items.Water)
+
         move(East)
 
     return measurements  # type: ignore - We know this can be casted to Any
