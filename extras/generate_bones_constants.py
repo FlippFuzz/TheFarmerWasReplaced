@@ -32,7 +32,7 @@ def generate_map(world_size: int) -> list[list[str]]:
 
 
 if __name__ == "__main__":
-    world_sizes = [8, 16, 32]
+    world_sizes = range(4, 33, 2)
 
     print("from __builtins__ import North, South, East, West, Direction")
     print("")
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     for world_size in world_sizes:
         map = generate_map(world_size)
 
-        print(f"def get_map_{world_size}() -> list[list[Direction]]:")
+        print(f"def _get_map_{world_size}() -> list[list[Direction]]:")
         print("    # fmt: off")
         print("    return [")
         for row in map:
@@ -58,3 +58,10 @@ if __name__ == "__main__":
         print("    # fmt: on")
         print("")
         print("")
+
+    print("def get_map(world_size: int) -> list[list[Direction]]:")
+    print("    switcher = {")
+    for world_size in world_sizes:
+        print(f"        {world_size}: _get_map_{world_size},")
+    print("    }")
+    print("    return switcher[world_size]()")
