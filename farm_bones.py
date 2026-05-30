@@ -24,6 +24,7 @@ def farm_bones(world_size: int):
     world_size_1 = world_size - 1
     max_length = world_size * world_size
     max_length_1 = max_length - 1
+    max_length_p80 = max_length * 0.8
     skip_length = (world_size - 2) * 2
 
     while True:
@@ -52,24 +53,42 @@ def farm_bones(world_size: int):
             # We just go north instead of looping left and back to the right
             skip_taken = False
             if y % 2 == 0:
-                if x == world_size_1:
-                    if apple_x != 0:
-                        if apple_y > y:
-                            # Apple is north of the snake.
-                            # We can cut across some snake rows.
-                            while num_skips * skip_length + length < max_length_1:
-                                y_next = y + 2
-                                if y_next < apple_y:
-                                    move(North)
-                                    move(North)
-                                    y = y_next
-                                    num_skips += 1
-                                    skip_taken = True
-                                else:
-                                    break
-                        elif apple_y < y:
-                            # Apple is south of the snake.
-                            # The shortcut is to move north asap to wrap around the world
+                # Optimization: Don't use shortcuts when snake is long
+                # When the snake is long, we want the snake to be tightly looped
+                # so that the apples will keep appearing in front.
+                # We don't want the apples to appear in a gap that is behind the head of the snake.
+                if length < max_length_p80:
+                    if x == world_size_1:
+                        if apple_x != 0:
+                            if apple_y > y:
+                                # Apple is north of the snake.
+                                # We can cut across some snake rows.
+                                while num_skips * skip_length + length < max_length_1:
+                                    y_next = y + 2
+                                    if y_next < apple_y:
+                                        move(North)
+                                        move(North)
+                                        y = y_next
+                                        num_skips += 1
+                                        skip_taken = True
+                                    else:
+                                        break
+                            elif apple_y < y:
+                                # Apple is south of the snake.
+                                # The shortcut is to move north asap to wrap around the world
+                                while num_skips * skip_length + length < max_length_1:
+                                    y_next = y + 2
+                                    if y_next < world_size_1:
+                                        move(North)
+                                        move(North)
+                                        y = y_next
+                                        num_skips += 1
+                                        skip_taken = True
+                                    else:
+                                        break
+                        elif apple_x == 0:
+                            # The apple is on the return path to south.
+                            # The shortcut is to move north ASAP so that we hit the return path
                             while num_skips * skip_length + length < max_length_1:
                                 y_next = y + 2
                                 if y_next < world_size_1:
@@ -80,19 +99,6 @@ def farm_bones(world_size: int):
                                     skip_taken = True
                                 else:
                                     break
-                    elif apple_x == 0:
-                        # The apple is on the return path to south.
-                        # The shortcut is to move north ASAP so that we hit the return path
-                        while num_skips * skip_length + length < max_length_1:
-                            y_next = y + 2
-                            if y_next < world_size_1:
-                                move(North)
-                                move(North)
-                                y = y_next
-                                num_skips += 1
-                                skip_taken = True
-                            else:
-                                break
 
             if not skip_taken:
                 dir = map[y][x]
